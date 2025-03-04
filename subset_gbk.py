@@ -72,7 +72,19 @@ def create_seq_obj(fasta_file:str, seq_id:str, name:str, desc:str) -> SeqIO.SeqR
     record.annotations = {"molecule_type": "DNA"}
     return record
 
-def add_cds(seq_obj, name, start, end, strand):
+def add_cds(seq_obj:SeqIO.SeqRecord, name:str, start:int, end:int, strand:int) -> SeqIO.SeqRecord:
+    """Add a cds type annotation to the sequence record.
+
+    Args:
+        seq_obj (SeqIO.SeqRecord): Seqrecord instance the CDS will be added to.
+        name (str): Annotation name (ID).
+        start (int): CDS start position.
+        end (int): CDS end position.
+        strand (int): Integer representing if the CDS is located on the forward (1) or backward (-1) strand.
+
+    Returns:
+        SeqIO.SeqRecord: Biopython SeqRecord instance with added CDS annotation.
+    """
     feature = SeqFeature(FeatureLocation(start, end), type="CDS", strand=strand, id=name)
     feature.qualifiers["gene"] = [name]
     # TODO: check if translation needs to be reversed if it is on the reverse strand
@@ -82,23 +94,45 @@ def add_cds(seq_obj, name, start, end, strand):
     seq_obj.features.append(feature)
     return seq_obj
 
-def subset_gbk(seq_obj, start, end):
+def subset_gbk(seq_obj:SeqIO.SeqRecord, start:int, end:int) -> SeqIO.SeqRecord:
+    """Subset the provided sequence record to the provided range.
+
+    Args:
+        seq_obj (SeqIO.SeqRecord): The sequence record that is to be subset.
+        start (int): Subset start position.
+        end (int): Subset end position.
+
+    Returns:
+        SeqIO.SeqRecord: Biopython SeqRecord sliced to the provided coordinates (with a buffer of two times the SLICE_OFFSET).
+    """
     return seq_obj[start - SLICE_OFFSET : end + SLICE_OFFSET]
 
-def save_gbk(seq_obj, filename):
+def save_gbk(seq_obj:SeqIO.SeqRecord, filename:str) -> None:
+    """Save the sequence record to the .gbk format.
+
+    Args:
+        seq_obj (SeqIO.SeqRecord): Sequence record that is to be converted to .gbk format.
+        filename (str): Name for the created genbank file.
+    """
     output_file = open(filename, "w")
     SeqIO.write(seq_obj, output_file, 'genbank')
 
 #%%
 
+# Read in gene locations from the blast results
 blast_dirpath = os.path.abspath(BLASTDIR)
 hoxda = blast_cluster_results(blast_dirpath, "hoxda")
 
-obj = create_seq_obj(SCAFFOLD, "id123456", "hoxda_scaffold", "Scoffold containing the hoxda gene cluster from rasbora Lateristriata")
+# Create a sequence object containing the (scaffolded draft assembly) chromosome containing the gene cluster
+obj = create_seq_obj(SCAFFOLD, "id123456", "hoxda_scaffold", "Scaffold containing the hoxda gene cluster from rasbora Lateristriata")
+
+# Loop through the found gene locations and add them to the record as annotations
 for key, value in hoxda.items():
     obj = add_cds(obj, key, value[0][0], value[0][-1], value[-1])
 
+# Calculate the start- and end positions of the gene cluster
 start = [x[0][0] for x in list(hoxda.values())]
 end = [x[0][-1] for x in list(hoxda.values())]
 
+# Subset the sequence record and save it to the genbank format
 save_gbk(subset_gbk(obj, min(start), max(end)), "./test.gbk")
